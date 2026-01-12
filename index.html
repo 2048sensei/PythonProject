@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF 知识图谱生成器</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; background-color: #f9f9f9; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; }
+        .upload-area { border: 2px dashed #3b82f6; background: #eff6ff; padding: 30px; text-align: center; border-radius: 8px; margin-bottom: 20px; }
+        button { background-color: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 10px; transition: background 0.3s; }
+        button:hover { background-color: #2563eb; }
+
+        /* 图表容器必须有宽高 */
+        #main-chart { width: 100%; height: 500px; border: 1px solid #eee; margin-top: 20px; border-radius: 8px; }
+
+        #text-preview { font-size: 12px; color: #666; margin-top: 10px; height: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔮 PDF 知识图谱生成器</h2>
+
+        <div class="upload-area">
+            <p>请上传 PDF，我们将自动提取前 10 个高频词并生成图谱</p>
+            <input type="file" id="pdfFile" accept=".pdf">
+            <br>
+            <button onclick="uploadAndGenGraph()">上传并生成图谱</button>
+        </div>
+
+        <div id="text-preview"></div>
+        <div id="main-chart"></div>
+    </div>
+
+    <script>
+        // 初始化 ECharts 实例
+        var myChart = echarts.init(document.getElementById('main-chart'));
+
+        // 定义基础配置
+        var option = {
+            title: { text: '文档高频词知识图谱' },
+            tooltip: {},
+            animationDurationUpdate: 1500,
+            animationEasingUpdate: 'quinticInOut',
+            series: [
+                {
+                    type: 'graph',
+                    layout: 'force',
+                    symbolSize: 30,
+                    roam: true,
+                    label: { show: true, fontSize: 14 },
+                    edgeSymbol: ['circle', 'arrow'],
+                    edgeSymbolSize: [4, 10],
+                    data: [],
+                    links: [],
+                    categories: [{name: '文档'}, {name: '关键词'}],
+                    force: {
+                        repulsion: 300,
+                        edgeLength: 100
+                    },
+                    lineStyle: {
+                        color: 'source',
+                        curveness: 0.1
+                    }
+                }
+            ]
+        };
+
+        myChart.setOption(option);
+
+        // --- 修复后的上传函数 ---
+        async function uploadAndGenGraph() {
+            const fileInput = document.getElementById('pdfFile');
+            const previewDiv = document.getElementById('text-preview');
+
+            // 1. 这里的地址选用了你的 https 版本，更稳妥
+            const publicUrl = 'https://61a00b00.r8.cpolar.cn';
+
+            if (fileInput.files.length === 0) {
+                alert('牧，请先选择一个 PDF 文件哦！');
+                return;
+            }
+
+            myChart.showLoading();
+
+            // 重要：必须手动创建 FormData 并把文件放进去
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                // 2. 发起网络请求
+                const response = await fetch(`${publicUrl}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                myChart.hideLoading();
+
+                if (response.ok) {
+                    previewDiv.innerText = "提取文字预览: " + data.content;
+
+                    // 3. 将后端返回的图谱数据填入 ECharts
+                    myChart.setOption({
+                        series: [{
+                            data: data.echarts_data.nodes,
+                            links: data.echarts_data.links
+                        }]
+                    });
+                } else {
+                    alert('后端报错啦: ' + (data.error || '未知错误'));
+                }
+            } catch (error) {
+                myChart.hideLoading();
+                console.error('详细错误信息:', error);
+                alert('连接失败！请检查：1.你的本地 Python 是否正在运行 2.Cpolar 是否在线');
+            }
+        }
+
+        window.onresize = function() {
+            myChart.resize();
+        };
+    </script>
+</body>
+</html>
